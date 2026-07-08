@@ -12,7 +12,7 @@
 // ourselves. This is a common real-world pattern once auth is involved.
 // -----------------------------------------------------------------------
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "../api/client.js";
 import client from "../api/client.js";
@@ -25,10 +25,36 @@ export default function Dashboard() {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
   const [upgrading, setUpgrading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { user, token, updateUser } = useAuth();
   const [searchParams] = useSearchParams();
-  const justUpgraded = searchParams.get("upgraded") === "true";
+  const [verifying, setVerifying] = useState(false);
+
+   // When Stripe redirects back here after checkout, it appends
+  // ?upgraded=true&session_id=cs_test_... to the URL. That alone doesn't
+  // prove payment succeeded on our end - it's just what the browser was
+  // told to do. So we ask our backend to verify the session directly with
+  // Stripe (GET /stripe/verify-session), which also upgrades the user
+  // immediately if the webhook hasn't landed yet.
+  useEffect(() => {
+    const sessionId = searchParams.get("session_id");
+    if (!sessionId) return;
+
+    setVerifying(true);
+    client
+      .get(`/stripe/verify-session?session_id=${sessionId}`)
+      .then((res) => {
+        if (res.data.user) {
+          updateUser(res.data.user);
+        }
+      })
+      .catch(() => {
+        setError("We couldn't confirm your upgrade automatically. If you were charged, refresh this page or contact support.");
+      })
+      .finally(() => setVerifying(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function handleGenerate(e) {
     e.preventDefault();
@@ -107,11 +133,24 @@ export default function Dashboard() {
     }
   }
 
+  async function handleCopy() {
+  try {
+    await navigator.clipboard.writeText(output);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  } catch (err) {
+    setError("Couldn't copy to clipboard - please select and copy manually.");
+  }
+}
+
   const remaining = user.plan === "free" ? Math.max(0, 3 - (user.usageCount || 0)) : null;
 
   return (
-    <div className="container">
-      {justUpgraded && (
+  <div className="dashboard-grid">
+    <div className="banners">
+      {verifying && <div className="usage-banner">Confirming your upgrade with Stripe...</div>}
+
+      {!verifying && searchParams.get("session_id") && user.plan === "pro" && (
         <div className="usage-banner">You're now on the Pro plan. Unlimited generations unlocked.</div>
       )}
 
@@ -125,37 +164,69 @@ export default function Dashboard() {
       )}
 
       {error && <div className="error-banner">{error}</div>}
+    </div>
 
-      <div className="card">
-        <form onSubmit={handleGenerate}>
-          <label>Job Description</label>
-          <textarea
-            value={jobDescription}
-            onChange={(e) => setJobDescription(e.target.value)}
-            placeholder="Paste the job description here..."
-            required
-          />
+    <div className="card">
+      <form onSubmit={handleGenerate}>
+        <label>Job Description</label>
+        <textarea
+          value={jobDescription}
+          onChange={(e) => setJobDescription(e.target.value)}
+          placeholder="Paste the job description here..."
+          required
+        />
 
-          <label>Your Current Resume</label>
-          <textarea
-            value={resume}
-            onChange={(e) => setResume(e.target.value)}
-            placeholder="Paste your resume text here..."
-            required
-          />
+        <label>Your Current Resume</label>
+        <textarea
+          value={resume}
+          onChange={(e) => setResume(e.target.value)}
+          placeholder="Paste your resume text here..."
+          required
+        />
 
-          <button type="submit" disabled={streaming}>
-            {streaming ? "Generating..." : "Generate Tailored Resume"}
-          </button>
-        </form>
-      </div>
+        <button type="submit" disabled={streaming}>
+          {streaming ? "Generating..." : "Generate Tailored Resume"}
+        </button>
+      </form>
+    </div>
 
-      {(output || streaming) && (
+    <div className="output-panel">
+      {output || streaming ? (
         <div className="card">
-          <label>Tailored Resume</label>
+          <div className="output-header">
+            <label>Tailored Resume</label>
+            <button
+              type="button"
+              className={`copy-btn${copied ? " copied" : ""}`}
+              onClick={handleCopy}
+              disabled={!output}
+            >
+              {copied ? (
+                <>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Copied
+                </>
+              ) : (
+                <>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  Copy
+                </>
+              )}
+            </button>
+          </div>
           <div className="output-box">{output || "Generating..."}</div>
+        </div>
+      ) : (
+        <div className="card output-placeholder">
+          Your tailored resume will appear here once you generate it.
         </div>
       )}
     </div>
-  );
+  </div>
+);
 }
