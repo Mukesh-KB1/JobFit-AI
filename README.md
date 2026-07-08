@@ -4,8 +4,6 @@ A full-stack app where a logged-in user pastes their resume + a job description,
 an AI-tailored version of their resume, streamed in real time. Free users get 3 generations/day;
 Stripe unlocks unlimited "Pro" access.
 
-This README is written so you can **set it up locally AND explain every part of it in an interview.**
-
 ---
 
 ## 1. Project structure
