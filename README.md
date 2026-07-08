@@ -4,6 +4,8 @@ A full-stack app where a logged-in user pastes their resume + a job description,
 an AI-tailored version of their resume, streamed in real time. Free users get 3 generations/day;
 Stripe unlocks unlimited "Pro" access.
 
+**Live demo:** [add your Vercel URL here once deployed]
+
 ---
 
 ## 1. Project structure
@@ -20,8 +22,8 @@ resume-tailor-ai/
 │   ├── routes/auth.js            → Signup / Login
 │   ├── routes/generate.js        → The core AI route (streams response)
 │   ├── routes/history.js         → Fetch past generations
-│   ├── routes/stripeCheckout.js  → Creates Stripe Checkout session
-│   ├── routes/stripeWebhook.js   → Confirms payment, upgrades user
+│   ├── routes/stripeCheckout.js  → Creates Stripe Checkout session + verifies payment on redirect
+│   ├── routes/stripeWebhook.js   → Confirms payment via webhook, upgrades user
 │   ├── server.js                 → Wires everything together
 │   └── .env.example               → Copy to .env and fill in
 │
@@ -31,7 +33,7 @@ resume-tailor-ai/
         ├── api/client.js            → Axios instance, auto-attaches JWT
         ├── pages/Login.jsx
         ├── pages/Signup.jsx
-        ├── pages/Dashboard.jsx      → Main form + streaming output
+        ├── pages/Dashboard.jsx      → Main form + streaming output, side-by-side layout
         ├── pages/History.jsx
         └── App.jsx                 → Routes + navbar
 ```
@@ -71,7 +73,7 @@ Open the new `.env` file and fill in each value:
 
 | Variable | Where to get it |
 |---|---|
-| `MONGO_URI` | MongoDB Atlas → Database → Connect → "Drivers" → copy connection string. Replace `<password>` with your DB user's password. |
+| `MONGO_URI` | MongoDB Atlas → Database → Connect → "Drivers" → copy connection string. Replace `<password>` with your DB user's password. Double check there's no stray quote character around `w=majority` in the string — see "Common issues" below. |
 | `JWT_SECRET` | Any long random string you make up (e.g. run `openssl rand -hex 32` in terminal) |
 | `GEMINI_API_KEY` | aistudio.google.com/apikey → "Create API key" → free, no credit card needed |
 | `STRIPE_SECRET_KEY` | dashboard.stripe.com → Developers → API Keys → "Secret key" (use test mode) |
@@ -127,17 +129,23 @@ internet, so Stripe provides a CLI tool that forwards events to your local machi
    card `4242 4242 4242 4242`, any future expiry, any CVC), the CLI window will show the webhook
    event arriving, and your backend will upgrade the user's plan in MongoDB.
 
+If the CLI isn't running (or the webhook is slow to arrive), the app has a fallback: when the
+browser redirects back to `/dashboard` after checkout, it calls `GET /api/stripe/verify-session`,
+which asks Stripe directly whether the payment succeeded and upgrades the user immediately if so.
+See section 7 for why both paths exist.
+
 ---
 
 ## 6. How to use the app
 
 1. Go to `http://localhost:5173` → redirects to `/login`
 2. Click "Sign up", create an account
-3. On the Dashboard, paste a job description and your resume text
-4. Click "Generate Tailored Resume" — watch the text stream in
-5. Check the "History" tab to see it saved
-6. Try generating 3 times as a free user — the 4th attempt should show the upgrade prompt
-7. Click "Upgrade to Pro" to test the Stripe flow (with the CLI running, per step 5 above)
+3. On the Dashboard, paste a job description and your resume text on the left
+4. Click "Generate Tailored Resume" — watch the text stream into the panel on the right
+5. Click the **Copy** button above the result to copy it to your clipboard
+6. Check the "History" tab to see it saved
+7. Try generating 3 times as a free user — the 4th attempt should show the upgrade prompt
+8. Click "Upgrade to Pro" to test the Stripe flow (with the CLI running, per step 5 above)
 
 ---
 
@@ -148,7 +156,8 @@ internet, so Stripe provides a CLI tool that forwards events to your local machi
 - The client stores it in `localStorage` and attaches it to every request via an Axios interceptor
   (see `api/client.js`).
 - The `protect` middleware (`middleware/auth.js`) verifies this token on every protected route
-  BEFORE the route handler runs — invalid/expired tokens are rejected early.
+  BEFORE the route handler runs — invalid/expired tokens are rejected early, and it re-fetches the
+  user fresh from MongoDB on every request, so plan/usage changes are always up to date.
 
 **Password security**
 - Passwords are never stored in plain text. `models/User.js` uses a Mongoose "pre-save hook" to
@@ -165,17 +174,26 @@ internet, so Stripe provides a CLI tool that forwards events to your local machi
   reader.
 
 **Rate limiting (business logic, not just security)**
-- `middleware/checkUsage.js` enforces the free-tier limit **server-side**. This matters because a
-  user could disable a button in the browser's dev tools — but they can't bypass a check that runs
-  in Express before the (costly) Gemini API call is even made.
+- `middleware/checkUsage.js` enforces the free-tier limit **server-side**, resetting by calendar
+  date rather than a rolling 24-hour window. This matters because a user could disable a button in
+  the browser's dev tools — but they can't bypass a check that runs in Express before the (costly)
+  Gemini API call is even made.
 
-**Stripe payments — webhook vs redirect**
-- After checkout, Stripe redirects the browser to a "success" URL — but that redirect could be
-  spoofed, interrupted, or never happen even after a real payment succeeds.
-- Instead, the app trusts only the **webhook** (`routes/stripeWebhook.js`) — a server-to-server
-  event Stripe sends when payment is *actually confirmed*. The webhook's signature is verified
-  using the raw request body, which is why that route is mounted in `server.js` before the global
-  `express.json()` middleware runs (JSON parsing would destroy the raw bytes needed for verification).
+**Stripe payments — webhook AND redirect verification**
+- After checkout, Stripe redirects the browser to a "success" URL — but that redirect alone only
+  proves the browser was told to come back, not that payment actually succeeded or that our
+  database was updated.
+- The **webhook** (`routes/stripeWebhook.js`) is the authoritative source of truth: a
+  server-to-server event Stripe sends when payment is *actually confirmed*, signed so we can verify
+  it's genuinely from Stripe. This is why that route is mounted in `server.js` before the global
+  `express.json()` middleware runs — JSON parsing would destroy the raw bytes needed for signature
+  verification.
+- As a fallback, `routes/stripeCheckout.js` also exposes `GET /verify-session`, called by the
+  frontend right after redirect. It checks payment status directly against Stripe's API and
+  upgrades the user immediately if the webhook hasn't landed yet (common in local dev if
+  `stripe listen` isn't running). This is a defense-in-depth pattern Stripe itself recommends —
+  the webhook remains authoritative for events that happen off-browser (renewals, cancellations),
+  while the verify-session call closes the gap right after checkout.
 
 **Database design**
 - `User` and `Generation` are separate collections linked by a MongoDB `ObjectId` reference
@@ -184,21 +202,63 @@ internet, so Stripe provides a CLI tool that forwards events to your local machi
 
 ---
 
-## 8. Common issues
+## 8. Deployment
 
-- **"MongoDB connection error"** → check your `MONGO_URI`, and that your IP is whitelisted in
-  Atlas (Network Access → Add IP Address → Allow from anywhere, for local dev).
-- **CORS errors in browser console** → make sure `CLIENT_URL` in `.env` exactly matches the URL
-  your frontend runs on (`http://localhost:5173`).
-- **Stripe webhook signature errors** → make sure you copied the `whsec_...` secret printed by
-  `stripe listen`, not the one from the Stripe dashboard (they're different for CLI testing).
-- **Streaming shows nothing** → open the Network tab in dev tools, check the `/generate` request
-  — if it returns a normal error JSON instead of a stream, check your Gemini API key.
+This app is split across two hosts because of how the backend is built:
+
+- **Frontend → [Vercel](https://vercel.com)** — a static Vite build, exactly what Vercel is built for.
+- **Backend → [Render](https://render.com)** — runs the Express server as a normal long-lived
+  process (not a serverless function), which is what the SSE streaming and Stripe webhook raw-body
+  verification both need.
+
+**Backend (Render):**
+1. New Web Service → connect this repo → Root Directory: `backend`
+2. Build Command: `npm install` · Start Command: `npm start`
+3. Add all the same environment variables listed in section 3
+4. Deploy — note the URL Render gives you (e.g. `https://jobfit-ai-backend.onrender.com`)
+
+**Frontend (Vercel):**
+1. Add New Project → connect this repo → Root Directory: `frontend`
+2. Framework Preset: Vite · Build Command: `npm run build` · Output Directory: `dist`
+3. Add environment variable: `VITE_API_URL=https://jobfit-ai-backend.onrender.com/api`
+4. Deploy — note the URL Vercel gives you (e.g. `https://jobfit-ai.vercel.app`)
+
+**Wire them together:**
+1. On Render, set `CLIENT_URL` to your Vercel URL, then redeploy
+2. In the Stripe Dashboard → Developers → Webhooks → Add endpoint, use
+   `https://jobfit-ai-backend.onrender.com/api/stripe/webhook`, select
+   `checkout.session.completed`, copy the signing secret into `STRIPE_WEBHOOK_SECRET` on Render,
+   redeploy
+
+Render's free tier spins down after 15 minutes idle and takes 30-60s to wake back up on the next
+request — fine for a portfolio demo, worth knowing about if you're sharing the link live.
 
 ---
 
-## 9. Possible next features (good "what would you add next" interview answer)
+## 9. Common issues
 
+- **"MongoDB connection error"** → check your `MONGO_URI`, and that your IP is whitelisted in
+  Atlas (Network Access → Add IP Address → Allow from anywhere, for local dev).
+- **`MongoWriteConcernError: No write concern mode named 'majority"'`** → there's a stray quote
+  character inside your `MONGO_URI`. Make sure it reads `...&w=majority` with no quotes around
+  `majority`.
+- **CORS errors in browser console** → make sure `CLIENT_URL` in `.env` exactly matches the URL
+  your frontend runs on.
+- **Stripe webhook signature errors** → make sure you copied the `whsec_...` secret printed by
+  `stripe listen` (local dev) or from the Dashboard's webhook endpoint settings (production) —
+  they're different secrets.
+- **Streaming shows nothing** → open the Network tab in dev tools, check the `/generate` request
+  — if it returns a normal error JSON instead of a stream, check your Gemini API key.
+- **Copy button does nothing** → `navigator.clipboard` requires `localhost` or HTTPS; it won't
+  work over plain `http://` on a production domain.
+
+---
+
+## 10. Known limitations / possible next features
+
+- `plan: "pro"` is a one-way flag — there's no handling yet for `customer.subscription.deleted` or
+  `invoice.payment_failed` webhook events, so a cancelled subscription doesn't currently downgrade
+  the user back to `"free"`. Worth adding for anything beyond a demo.
 - PDF upload/parsing for the resume instead of copy-pasting text
 - Export the tailored resume as a downloadable Word/PDF file
 - Multiple resume "versions" saved per job application
