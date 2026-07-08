@@ -31,7 +31,7 @@ export default function Dashboard() {
   const [searchParams] = useSearchParams();
   const [verifying, setVerifying] = useState(false);
 
-   // When Stripe redirects back here after checkout, it appends
+  // When Stripe redirects back here after checkout, it appends
   // ?upgraded=true&session_id=cs_test_... to the URL. That alone doesn't
   // prove payment succeeded on our end - it's just what the browser was
   // told to do. So we ask our backend to verify the session directly with
@@ -58,6 +58,12 @@ export default function Dashboard() {
 
   async function handleGenerate(e) {
     e.preventDefault();
+
+    if (limitReached) {
+      setError("You've used all 3 free generations today. Upgrade to Pro for unlimited access.");
+      return;
+    }
+
     setError("");
     setOutput("");
     setStreaming(true);
@@ -134,99 +140,100 @@ export default function Dashboard() {
   }
 
   async function handleCopy() {
-  try {
-    await navigator.clipboard.writeText(output);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  } catch (err) {
-    setError("Couldn't copy to clipboard - please select and copy manually.");
+    try {
+      await navigator.clipboard.writeText(output);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      setError("Couldn't copy to clipboard - please select and copy manually.");
+    }
   }
-}
 
   const remaining = user.plan === "free" ? Math.max(0, 3 - (user.usageCount || 0)) : null;
+  const limitReached = user.plan === "free" && remaining === 0;
 
   return (
-  <div className="dashboard-grid">
-    <div className="banners">
-      {verifying && <div className="usage-banner">Confirming your upgrade with Stripe...</div>}
+    <div className="dashboard-grid">
+      <div className="banners">
+        {verifying && <div className="usage-banner">Confirming your upgrade with Stripe...</div>}
 
-      {!verifying && searchParams.get("session_id") && user.plan === "pro" && (
-        <div className="usage-banner">You're now on the Pro plan. Unlimited generations unlocked.</div>
-      )}
+        {!verifying && searchParams.get("session_id") && user.plan === "pro" && (
+          <div className="usage-banner">You're now on the Pro plan. Unlimited generations unlocked.</div>
+        )}
 
-      {user.plan === "free" && (
-        <div className="usage-banner">
-          Free plan: {remaining} of 3 generations left today.{" "}
-          <a href="#" onClick={handleUpgrade}>
-            {upgrading ? "Redirecting..." : "Upgrade to Pro for unlimited"}
-          </a>
-        </div>
-      )}
-
-      {error && <div className="error-banner">{error}</div>}
-    </div>
-
-    <div className="card">
-      <form onSubmit={handleGenerate}>
-        <label>Job Description</label>
-        <textarea
-          value={jobDescription}
-          onChange={(e) => setJobDescription(e.target.value)}
-          placeholder="Paste the job description here..."
-          required
-        />
-
-        <label>Your Current Resume</label>
-        <textarea
-          value={resume}
-          onChange={(e) => setResume(e.target.value)}
-          placeholder="Paste your resume text here..."
-          required
-        />
-
-        <button type="submit" disabled={streaming}>
-          {streaming ? "Generating..." : "Generate Tailored Resume"}
-        </button>
-      </form>
-    </div>
-
-    <div className="output-panel">
-      {output || streaming ? (
-        <div className="card">
-          <div className="output-header">
-            <label>Tailored Resume</label>
-            <button
-              type="button"
-              className={`copy-btn${copied ? " copied" : ""}`}
-              onClick={handleCopy}
-              disabled={!output}
-            >
-              {copied ? (
-                <>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  Copied
-                </>
-              ) : (
-                <>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
-                  Copy
-                </>
-              )}
-            </button>
+        {user.plan === "free" && (
+          <div className="usage-banner">
+            Free plan: {remaining} of 3 generations left today.{" "}
+            <a href="#" onClick={handleUpgrade}>
+              {upgrading ? "Redirecting..." : "Upgrade to Pro for unlimited"}
+            </a>
           </div>
-          <div className="output-box">{output || "Generating..."}</div>
-        </div>
-      ) : (
-        <div className="card output-placeholder">
-          Your tailored resume will appear here once you generate it.
-        </div>
-      )}
+        )}
+
+        {error && <div className="error-banner">{error}</div>}
+      </div>
+
+      <div className="card">
+        <form onSubmit={handleGenerate}>
+          <label>Job Description</label>
+          <textarea
+            value={jobDescription}
+            onChange={(e) => setJobDescription(e.target.value)}
+            placeholder="Paste the job description here..."
+            required
+          />
+
+          <label>Your Current Resume</label>
+          <textarea
+            value={resume}
+            onChange={(e) => setResume(e.target.value)}
+            placeholder="Paste your resume text here..."
+            required
+          />
+
+          <button type="submit" disabled={streaming || limitReached}>
+            {streaming ? "Generating..." : limitReached ? "Daily limit reached" : "Generate Tailored Resume"}
+          </button>
+        </form>
+      </div>
+
+      <div className="output-panel">
+        {output || streaming ? (
+          <div className="card">
+            <div className="output-header">
+              <label>Tailored Resume</label>
+              <button
+                type="button"
+                className={`copy-btn${copied ? " copied" : ""}`}
+                onClick={handleCopy}
+                disabled={!output}
+              >
+                {copied ? (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="output-box">{output || "Generating..."}</div>
+          </div>
+        ) : (
+          <div className="card output-placeholder">
+            Your tailored resume will appear here once you generate it.
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
 }
