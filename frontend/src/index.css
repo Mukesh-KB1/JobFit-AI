@@ -128,3 +128,92 @@ button.secondary {
   max-width: 380px;
   margin: 60px auto;
 }
+
+/* -------------------------------------------------------------------
+   Dashboard layout: form on the left, generated resume pinned to the
+   right so it's visible without scrolling past the form. Collapses to
+   a single column on narrow screens.
+   ------------------------------------------------------------------- */
+.dashboard-grid {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.dashboard-grid .banners {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.output-panel {
+  position: sticky;
+  top: 24px;
+}
+
+@media (max-width: 900px) {
+  .output-panel {
+    position: static;
+  }
+}
+
+.output-panel .card {
+  margin-bottom: 0;
+}
+
+.output-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.output-header label {
+  margin-bottom: 0;
+}
+
+.output-placeholder {
+  color: #6b7280;
+  font-size: 14px;
+  text-align: center;
+  padding: 48px 16px;
+}
+
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  color: #111827;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.copy-btn:hover {
+  background: #f3f4f6;
+}
+
+.copy-btn.copied {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.copy-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
