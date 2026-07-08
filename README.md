@@ -4,7 +4,7 @@ A full-stack app where a logged-in user pastes their resume + a job description,
 an AI-tailored version of their resume, streamed in real time. Free users get 3 generations/day;
 Stripe unlocks unlimited "Pro" access.
 
-**Live demo:** []
+**Live demo:** [https://job-fit-ai-liart.vercel.app/dashboard]
 
 ---
 
