@@ -26,9 +26,10 @@ function Navbar() {
 
   return (
     <div className="navbar">
-      <Link to="/" style={{ fontWeight: 700 }}>
+      {/* <Link to="/" style={{ fontWeight: 700 }}>
         JobFit AI
-      </Link>
+      </Link> */}
+      <img src="/logo-full.svg" alt="JobFit AI" height="36" />
       <div>
         {user ? (
           <>

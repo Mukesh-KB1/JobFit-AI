@@ -1,0 +1,14 @@
+<svg width="214" height="48" viewBox="0 0 214 48" xmlns="http://www.w3.org/2000/svg">
+  <!-- icon -->
+  <rect width="48" height="48" rx="10.5" fill="#111827"/>
+  <path d="M12 9 H27 L33 15 V39 H12 Z" fill="#ffffff"/>
+  <path d="M27 9 L33 15 H27 Z" fill="#cbd5e1"/>
+  <rect x="15" y="20.2" width="12" height="2.25" rx="1.1" fill="#9ca3af"/>
+  <rect x="15" y="25.5" width="15" height="2.25" rx="1.1" fill="#9ca3af"/>
+  <rect x="15" y="30.8" width="9.7" height="2.25" rx="1.1" fill="#9ca3af"/>
+  <circle cx="34.5" cy="34.5" r="8.25" fill="#0d9488" stroke="#111827" stroke-width="1.9"/>
+  <path d="M30.7 34.9 L33.4 37.6 L38.6 31.5" fill="none" stroke="#ffffff" stroke-width="1.95" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- wordmark -->
+  <text x="62" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="25" fill="#111827">JobFit<tspan fill="#0d9488">AI</tspan></text>
+</svg>
